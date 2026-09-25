@@ -1,34 +1,35 @@
-version: '3.9'
+name: bac-portfolio-demo
+
 services:
   postgres:
-    container_name: BACv2.00
-    image: postgres
-    hostname: localhost
+    image: postgres:16.15
     ports:
-      - '5432:5432'
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: root
-      POSTGRES_DB: test_db
+      POSTGRES_USER: ${POSTGRES_USER:-bac_demo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-demo-only}
+      POSTGRES_DB: ${POSTGRES_DB:-bac_demo}
     volumes:
-      - postgres-data:/var/lib/BACv2.00/data
-    restart: unless-stopped
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   pgadmin:
-    container_name: BACv2pgadmin
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:9.18
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
-      - '5050:80'
+      - '127.0.0.1:${PGADMIN_PORT:-5050}:80'
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com 
-      PGADMIN_DEFAULT_PASSWORD: root
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-demo@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-local-pgadmin-only}
     volumes:
-      - pgadmin-data:/var/lib/BACv2pgadmin
-    restart: unless-stopped
+      - pgadmin-data:/var/lib/pgadmin
 
 volumes:
   postgres-data:
   pgadmin-data:
-

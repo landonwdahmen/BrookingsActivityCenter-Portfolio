@@ -101,7 +101,6 @@ function getFormData() {
     // Extracting user ID from URL
     var urlParams = new URLSearchParams(window.location.search);
     formData.userId = urlParams.get('userId');
-    console.log(formData.userId);
     
     formData.selectedDate = document.getElementById("selectedDate").value;
     formData.shift1Dropdown = document.getElementById('shift1Dropdown').value;

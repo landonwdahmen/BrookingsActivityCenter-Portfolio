@@ -1,11 +1,13 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const { Pool } = require('pg');
-const path = require('path'); // Import path module to work with file paths
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Initialize Express app
 const app = express();
-const port = 3000;
+const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || '127.0.0.1';
 
 // Middleware to parse JSON data
 app.use(bodyParser.json());
@@ -13,21 +15,25 @@ app.use(bodyParser.json());
 // Middleware to parse URL-encoded data
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Serve static files from the "html" directory
-app.use(express.static(__dirname + '/html'));
+// Expose frontend directories and explicitly named root assets only.
+// Keep both historical page URL forms working without exposing repository files.
+app.use('/html', express.static(path.join(__dirname, 'html'), { dotfiles: 'deny', index: false }));
+app.use(express.static(path.join(__dirname, 'html'), { dotfiles: 'deny', index: false }));
+for (const directory of ['css', 'images']) {
+  app.use('/' + directory, express.static(path.join(__dirname, directory), { dotfiles: 'deny', index: false }));
+}
+app.get(['/', '/index.html'], (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+for (const file of ['script.js', 'admin.js', 'employeeScript.js', 'viewSchedule.js']) {
+  app.get('/' + file, (req, res) => res.sendFile(path.join(__dirname, file)));
+}
 
-// Serve the admin.html file
-app.get('/admin.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'admin.html'));
-});
-
-// Database configuration
+// Shared local-development configuration with Docker Compose.
 const pool = new Pool({
-  user: 'admin',
-  host: 'localhost',
-  database: 'BAC',
-  password: 'root',
-  port: 5432,
+  user: process.env.POSTGRES_USER || 'bac_demo',
+  host: process.env.DB_HOST || '127.0.0.1',
+  database: process.env.POSTGRES_DB || 'bac_demo',
+  password: process.env.POSTGRES_PASSWORD || 'local-demo-only',
+  port: Number(process.env.DB_PORT || 5432),
 });
 
 // Handle the /schedule endpoint to fetch events
@@ -42,7 +48,7 @@ app.get('/Eventschedule', async (req, res) => {
     const result = await pool.query(query);
     res.json(result.rows); // Send events data as JSON response
   } catch (error) {
-    console.error('Error fetching events:', error);
+    console.error('Error fetching events:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });
@@ -329,7 +335,7 @@ const eventsTestData = `
     await client.query(insertAvailability);
     client.release();
   } catch (err) {
-    console.error('Error initializing database:', err);
+    console.error('Error initializing database:', err.code || 'UNKNOWN');
   }
 })();
 
@@ -383,13 +389,12 @@ app.post('/submit_form', async (req, res) => {
 
     res.redirect(`form.html`)
   } catch (error) {
-    console.error('Error submitting form:', error);
+    console.error('Error submitting form:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });
 
-// Serve static files from the "html" directory
-app.use(express.static(__dirname + '/html'));
+
 
 
 // Handle login form submission
@@ -421,7 +426,7 @@ app.post('/login', async (req, res) => {
       res.send('Invalid Username or Password');
     }
   } catch (error) {
-    console.error('Error during login:', error);
+    console.error('Error during login:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });
@@ -432,8 +437,7 @@ app.get('/login', (req, res) => {
   res.sendFile(__dirname + '/html/login.html');
 });
 
-// Serve other static files
-app.use(express.static(__dirname));
+
 
 
 
@@ -505,7 +509,7 @@ app.post('/submit_availability', async (req, res) => {
 
 
   } catch (error) {
-    console.error('Error submitting shift availability:', error);
+    console.error('Error submitting shift availability:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });
@@ -515,10 +519,7 @@ app.post('/submit_availability', async (req, res) => {
 
 
 
-app.get('/employee.html', (req, res) => {
-  const userId = req.query.userId; // Extract userId from the URL query parameters
-  res.render(__dirname + '/path/to/employee.html', { userId }); // Pass userId to the template
-});
+// Employee pages are served by the frontend-only static middleware above.
 
 
 
@@ -548,14 +549,14 @@ app.post('/create_employee', async (req, res) => {
 
     res.sendStatus(201); // Send a 201 status code to indicate successful creation
   } catch (error) {
-    console.error('Error creating employee:', error);
+    console.error('Error creating employee:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });
 
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+app.listen(port, host, () => {
+  console.log(`Server is running at http://${host}:${port}`);
 });
 
 // Handle the /schedule endpoint to fetch events
@@ -608,11 +609,10 @@ app.get('/schedule', async (req, res) => {
       return formattedEvent;
     }));
 
-    // console.log(formattedEvents.availableStaff);
     res.json(formattedEvents); // Send events data as JSON response
 
   } catch (error) {
-    console.error('Error fetching events:', error);
+    console.error('Error fetching events:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });

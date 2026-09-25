@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch('/schedule')
     .then(response => response.json())
     .then(events => {
-        console.log("Fetched Events:", events);
         events.forEach(event => {
             // Concatenate date and time strings retrieved from the server
             var startDateTime = event.event_date + 'T' + event.event_time + ':00'; // Assuming both fields are in compatible formats

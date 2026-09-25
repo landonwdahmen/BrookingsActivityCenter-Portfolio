@@ -62,13 +62,11 @@ document.getElementById('createEmployeeForm').addEventListener('submit', async (
     const requestBody = {};
 
     formData.forEach((value, key) => {
-        console.log(value);
         if (key === 'isAdmin') {
             
             // If the checkbox is checked, set its value to true, otherwise set it to false
             requestBody[key] = form[key].checked;
         } else {
-            console.log('hi');
             requestBody[key] = value;
         }
     });
