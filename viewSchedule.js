@@ -70,14 +70,3 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     });
   });
-
-
-
-  const urlParams = new URLSearchParams(window.location.search);
-  const userId = urlParams.get('userId');
-
-  // Modifying the link to viewSchedule.html to include the userId parameter
-  const logAvailabilituy = document.querySelector('a[href="employee.html"]');
-  if (logAvailabilituy) {
-    logAvailabilituy.href = `employee.html?userId=${userId}`;
-  }

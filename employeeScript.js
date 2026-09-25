@@ -37,15 +37,7 @@ populateDatesSelect();
 // Event listener to update the hidden input field when the date selection changes
 document.getElementById("dateSelect").addEventListener("change", setSelectedDate);
 
-// Function to populate the hidden input field with userId
-function setUserId() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get('userId');
-    document.getElementById("userId").value = userId;
-}
 
-// Call the function to set userId
-setUserId();
 
 
 function validateAvailabilityForm() {
@@ -74,8 +66,7 @@ function displayConfirmationBox() {
     var formData = getFormData();
     var selectedDate = document.getElementById("selectedDate").value;
 
-    var confirmationMessage = 'UserID: ' + formData.userId + '\n' +
-                              'selectedDate: ' + formData.selectedDate + '\n' +
+    var confirmationMessage = 'selectedDate: ' + formData.selectedDate + '\n' +
                               'shift1Dropdown: ' + formData.shift1Dropdown + '\n' +
                               'shift2Dropdown: ' + formData.shift2Dropdown + '\n' +
                               'shift3Dropdown: ' + formData.shift3Dropdown;
@@ -98,9 +89,7 @@ function displayConfirmationBox() {
 function getFormData() {
     var formData = {};
     
-    // Extracting user ID from URL
-    var urlParams = new URLSearchParams(window.location.search);
-    formData.userId = urlParams.get('userId');
+
     
     formData.selectedDate = document.getElementById("selectedDate").value;
     formData.shift1Dropdown = document.getElementById('shift1Dropdown').value;
@@ -150,26 +139,3 @@ document.addEventListener("DOMContentLoaded", function() {
   });
   
 
-  // Get the userId from the current URL
-  const urlParams = new URLSearchParams(window.location.search);
-  const userId = urlParams.get('userId');
-
-  // Modify the link to viewSchedule.html to include the userId parameter
-  const viewScheduleLink = document.querySelector('a[href="viewSchedule.html"]');
-  if (viewScheduleLink) {
-    viewScheduleLink.href = `viewSchedule.html?userId=${userId}`;
-  }
-
-  const home = document.querySelector('a[href="/index.html"]');
-  if (home) {
-    home.href = `/index.html?userId=${userId}`;
-  }
-
-  // Modify the link to employee.html to include the userId parameter
-  const employeePageLink = document.getElementById('employeePageLink');
-  if (employeePageLink) {
-    employeePageLink.href = `employee.html?userId=${userId}`;
-  }
-
-
- 

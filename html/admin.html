@@ -26,7 +26,8 @@
 
             </li>
           </ul>
-        </nav>
+        <form action="/logout" method="POST"><button type="submit">Log out</button></form>
+    </nav>
       </header>
 
     <h2>Create New Employee</h2>
@@ -35,7 +36,7 @@
         <input type="text" id="username" name="username" required>
         
         <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required>
+        <input type="password" id="password" name="password" minlength="12" maxlength="256" required>
 
         <label for="job">Job:</label>
         <input type="job" id="job" name="job" required>

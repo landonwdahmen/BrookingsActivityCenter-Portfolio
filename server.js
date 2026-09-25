@@ -1,5 +1,7 @@
 const express = require('express');
-const bodyParser = require('body-parser');
+const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
+const { hashPassword, verifyPassword, isPasswordHash } = require('./auth');
 const { Pool } = require('pg');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -8,24 +10,6 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
-
-// Middleware to parse JSON data
-app.use(bodyParser.json());
-
-// Middleware to parse URL-encoded data
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// Expose frontend directories and explicitly named root assets only.
-// Keep both historical page URL forms working without exposing repository files.
-app.use('/html', express.static(path.join(__dirname, 'html'), { dotfiles: 'deny', index: false }));
-app.use(express.static(path.join(__dirname, 'html'), { dotfiles: 'deny', index: false }));
-for (const directory of ['css', 'images']) {
-  app.use('/' + directory, express.static(path.join(__dirname, directory), { dotfiles: 'deny', index: false }));
-}
-app.get(['/', '/index.html'], (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-for (const file of ['script.js', 'admin.js', 'employeeScript.js', 'viewSchedule.js']) {
-  app.get('/' + file, (req, res) => res.sendFile(path.join(__dirname, file)));
-}
 
 // Shared local-development configuration with Docker Compose.
 const pool = new Pool({
@@ -36,21 +20,92 @@ const pool = new Pool({
   port: Number(process.env.DB_PORT || 5432),
 });
 
-// Handle the /schedule endpoint to fetch events
-app.get('/Eventschedule', async (req, res) => {
-  try {
-    // Fetch events from the database
-    const query = `
-      SELECT *
-      FROM eventinfo
-      WHERE event_date >= CURRENT_DATE  -- Fetch events from today onwards
-    `;
-    const result = await pool.query(query);
-    res.json(result.rows); // Send events data as JSON response
-  } catch (error) {
-    console.error('Error fetching events:', error.code || 'UNKNOWN');
-    res.status(500).send('Internal Server Error');
+// Fail closed instead of using a built-in secret or MemoryStore.
+const secret = process.env.SESSION_SECRET;
+if (!secret || secret.length < 32 || secret.startsWith('replace-')) {
+  throw new Error('Set SESSION_SECRET to a random value of at least 32 characters. See .env.example.');
+}
+const secureCookie = process.env.SESSION_COOKIE_SECURE === 'true';
+if (process.env.NODE_ENV === 'production' && !secureCookie) {
+  throw new Error('Production requires SESSION_COOKIE_SECURE=true and HTTPS.');
+}
+// Enable only behind exactly one trusted reverse proxy that overwrites forwarding headers.
+if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(express.json({ limit: '16kb' }));
+app.use(express.urlencoded({ extended: false, limit: '16kb', parameterLimit: 100 }));
+
+// Only public assets/pages are static. Never mount the HTML directory.
+for (const directory of ['css', 'images']) {
+  app.use('/' + directory, express.static(path.join(__dirname, directory), { dotfiles: 'deny', index: false }));
+}
+for (const file of ['script.js', 'admin.js', 'employeeScript.js', 'viewSchedule.js']) {
+  app.get('/' + file, (req, res) => res.sendFile(path.join(__dirname, file)));
+}
+app.get(['/', '/index.html'], (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+for (const file of ['form.html', 'login.html']) {
+  app.get(['/' + file, '/html/' + file], (req, res) => res.sendFile(path.join(__dirname, 'html', file)));
+}
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'html/login.html')));
+
+app.use(session({
+  name: 'bac.sid',
+  secret,
+  store: new PgSession({
+    pool, tableName: 'user_sessions', createTableIfMissing: true,
+    errorLog: () => console.error('Session store error'),
+  }),
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: 'strict', secure: secureCookie, maxAge: 8 * 60 * 60 * 1000 },
+}));
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
+// Browser defense for authentication/state changes. Non-browser clients may omit
+// Origin; SameSite cookies remain an additional boundary, not a CSRF token system.
+app.use(['/login', '/logout', '/create_employee', '/submit_availability'], (req, res, next) => {
+  if (req.method === 'POST') {
+    const origin = req.get('origin');
+    if (req.get('sec-fetch-site') === 'cross-site' ||
+        (origin && origin !== `${req.protocol}://${req.get('host')}`)) {
+      return res.status(403).json({ error: 'Cross-origin request denied' });
+    }
   }
+  next();
+});
+
+// Reload identity/role from PostgreSQL; never trust a browser role or userId.
+async function requireEmployee(req, res, next) {
+  try {
+    if (req.session.employeeId) {
+      const result = await pool.query('SELECT id, username, is_admin, job FROM employees WHERE id = $1', [req.session.employeeId]);
+      if (result.rows.length) {
+        req.employee = result.rows[0];
+        return next();
+      }
+    }
+    if (req.path.toLowerCase().endsWith('.html')) return res.redirect('/login.html');
+    return res.status(401).json({ error: 'Authentication required' });
+  } catch (error) { next(error); }
+}
+function requireAdmin(req, res, next) {
+  if (!req.employee.is_admin) return res.status(403).json({ error: 'Administrator required' });
+  next();
+}
+for (const file of ['employee.html', 'viewSchedule.html', 'admin.html']) {
+  const guards = file === 'admin.html' ? [requireEmployee, requireAdmin] : [requireEmployee];
+  app.get(['/' + file, '/html/' + file], ...guards, (req, res) => res.sendFile(path.join(__dirname, 'html', file)));
+}
+
+// No frontend consumes this historical endpoint; restrict it to admins and omit contact data.
+app.get('/Eventschedule', requireEmployee, requireAdmin, async (req, res, next) => {
+  try {
+    const result = await pool.query('SELECT event_name, event_date, event_time, event_duration FROM eventinfo WHERE event_date >= CURRENT_DATE');
+    res.json(result.rows);
+  } catch (error) { next(error); }
 });
 
 //create the eventInfo Table
@@ -78,7 +133,7 @@ const createEmployeesTable = `
   CREATE TABLE IF NOT EXISTS employees (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(100) NOT NULL,
+    password TEXT NOT NULL,
     is_admin BOOLEAN DEFAULT FALSE,
     job VARCHAR(100) NOT NULL
   )
@@ -106,22 +161,14 @@ const setInitialSequenceValue = `
   SELECT setval('employees_id_seq', COALESCE((SELECT MAX(id)+1 FROM employees), 1), false);
 `;
 
-// Insert initial data into employees table
-const insertInitialEmployeesData = `
-  INSERT INTO employees (username, password, is_admin, job)
-  VALUES 
-  ('Johnny', '123', TRUE, 'admin'), 
-  ('Jacob', '456', TRUE, 'admin'), 
-  ('Kyle', '789', TRUE, 'admin'), 
-  ('Carter', '000', TRUE, 'admin'), 
-  ('Carters', 'Mom', false, 'cook'),
-  ('Tom', 'isCool', FALSE, 'cook'), 
-  ('Jack', 'abc', FALSE, 'Event Staff'), 
-  ('Henry', 'abc123', FALSE, 'cook'), 
-  ('Jen', '123', FALSE, 'cook'),
-  ('Ken', '567', FALSE, 'Event Staff')
-  ON CONFLICT (username) DO NOTHING
-`;
+// Public academic demo credentials are hashed before any database insertion.
+const demoEmployees = [
+  ['Johnny', '123', true, 'admin'], ['Jacob', '456', true, 'admin'],
+  ['Kyle', '789', true, 'admin'], ['Carter', '000', true, 'admin'],
+  ['Carters', 'Mom', false, 'cook'], ['Tom', 'isCool', false, 'cook'],
+  ['Jack', 'abc', false, 'Event Staff'], ['Henry', 'abc123', false, 'cook'],
+  ['Jen', '123', false, 'cook'], ['Ken', '567', false, 'Event Staff'],
+];
 
 const alterAvail = `
 ALTER TABLE availability ADD CONSTRAINT unique_username_date UNIQUE (username, date);
@@ -310,15 +357,32 @@ const eventsTestData = `
   ON CONFLICT (event_name) DO NOTHING;
 `;
 
-(async () => {
+async function initializeDatabase() {
+  const client = await pool.connect();
   try {
-    const client = await pool.connect();
+    await client.query('BEGIN');
     await client.query(createEventInfoTable);
     await client.query(eventsTestData);
     await client.query(createEmployeesTable);
     await client.query(createSequence);
     //await client.query(setInitialSequenceValue);
-    await client.query(insertInitialEmployeesData);
+    await client.query('ALTER TABLE employees ALTER COLUMN password TYPE TEXT');
+    const accounts = await client.query('SELECT id, password FROM employees FOR UPDATE');
+    const legacy = accounts.rows.filter(row => !isPasswordHash(row.password));
+    if (legacy.length && process.env.MIGRATE_LEGACY_PASSWORDS !== 'true') {
+      const error = new Error('Legacy passwords require explicit conversion');
+      error.code = 'LEGACY_PASSWORDS_REQUIRE_OPT_IN';
+      throw error;
+    }
+    for (const account of legacy) {
+      await client.query('UPDATE employees SET password = $1 WHERE id = $2', [await hashPassword(account.password), account.id]);
+    }
+    for (const [username, password, admin, job] of demoEmployees) {
+      const existing = await client.query('SELECT id FROM employees WHERE username = $1', [username]);
+      if (!existing.rows.length) {
+        await client.query('INSERT INTO employees (username, password, is_admin, job) VALUES ($1, $2, $3, $4)', [username, await hashPassword(password), admin, job]);
+      }
+    }
     await client.query(createAvailabilityTable);
     const checkConstraintQuery = `
   SELECT constraint_name
@@ -333,11 +397,14 @@ const eventsTestData = `
     }
 
     await client.query(insertAvailability);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
     client.release();
-  } catch (err) {
-    console.error('Error initializing database:', err.code || 'UNKNOWN');
   }
-})();
+}
 
 
 app.post('/submit_form', async (req, res) => {
@@ -397,61 +464,42 @@ app.post('/submit_form', async (req, res) => {
 
 
 
-// Handle login form submission
-app.post('/login', async (req, res) => {
+// Use a valid dummy hash for unknown accounts to reduce username timing differences.
+let dummyPasswordHash;
+app.post('/login', async (req, res, next) => {
   try {
     const { username, password } = req.body;
-
-    const query = `
-            SELECT * FROM employees
-            WHERE username = $1 AND password = $2
-        `;
-
-    const result = await pool.query(query, [username, password]);
-
-    if (result.rows.length > 0) {
-      const user = result.rows[0];
-      if (user.is_admin) {
-        const userId = result.rows[0].id
-        // res.json({ userId }); prints userID:3
-        res.redirect(`/admin.html?userId=${userId}`);// Redirect to admin page if user is an admin
-      } else {
-        const userId = result.rows[0].id
-        // res.json({ userId }); prints userID:3
-        res.redirect(`/employee.html?userId=${userId}`);
-        // Redirect to employee page if user is a regular employee
-      }
-    } else {
-      // Invalid username or password
-      res.send('Invalid Username or Password');
+    if (typeof username !== 'string' || typeof password !== 'string' || !username.trim() || username.length > 50 || !password || password.length > 256) {
+      return res.status(401).send('Invalid username or password');
     }
-  } catch (error) {
-    console.error('Error during login:', error.code || 'UNKNOWN');
-    res.status(500).send('Internal Server Error');
-  }
+    const result = await pool.query('SELECT id, password, is_admin FROM employees WHERE username = $1', [username.trim()]);
+    const account = result.rows[0];
+    const valid = await verifyPassword(password, account ? account.password : dummyPasswordHash);
+    if (!account || !valid) return res.status(401).send('Invalid username or password');
+    await new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
+    req.session.employeeId = account.id;
+    await new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
+    res.redirect(account.is_admin ? '/admin.html' : '/employee.html');
+  } catch (error) { next(error); }
+});
+app.post('/logout', (req, res, next) => {
+  req.session.destroy(error => {
+    if (error) return next(error);
+    res.clearCookie('bac.sid', { path: '/', httpOnly: true, sameSite: 'strict', secure: secureCookie });
+    res.redirect('/login.html');
+  });
 });
 
-
-// Serve the login page
-app.get('/login', (req, res) => {
-  res.sendFile(__dirname + '/html/login.html');
-});
-
-
-
-
-
-
-app.post('/submit_availability', async (req, res) => {
+app.post('/submit_availability', requireEmployee, async (req, res) => {
   try {
     const {
       selectedDate,
       shift1Dropdown,
       shift2Dropdown,
-      shift3Dropdown,
-      userId,
-      job
+      shift3Dropdown
     } = req.body;
+
+    const userId = req.employee.id;
 
     // Check if availability exists for the selected date
     const availabilityCheckQuery = `
@@ -495,7 +543,7 @@ app.post('/submit_availability', async (req, res) => {
         VALUES ($1, $2, $3, $4, $5, $6, $7)
       `;
       await pool.query(insertQuery, [
-        userId,  // Using userId obtained from the form data
+        userId,  // Identity comes only from the authenticated session
         employeeName,
         selectedDate,
         shift1Dropdown,
@@ -505,7 +553,7 @@ app.post('/submit_availability', async (req, res) => {
       ]);
     }
 
-    res.redirect(`/employee.html?userId=${userId}`);
+    res.redirect('/employee.html');
 
 
   } catch (error) {
@@ -519,52 +567,30 @@ app.post('/submit_availability', async (req, res) => {
 
 
 
-// Employee pages are served by the frontend-only static middleware above.
-
-
-
-
-
-// Parse JSON, this is necessary because the client sends JSON data
-app.use(bodyParser.json());
-
-// Parse URL-encoded bodies for form data
-app.use(bodyParser.urlencoded({ extended: true }));
-
-
-// Handle employee creation
-app.post('/create_employee', async (req, res) => {
+// Account creation is an administrator operation, including creation of another admin.
+app.post('/create_employee', requireEmployee, requireAdmin, async (req, res, next) => {
   try {
-    const { username, password, isAdmin, job } = req.body;
-
-    // If isAdmin is null or undefined, set it to false
-    const isAdminValue = isAdmin || false;
-
-    const insertQuery = `
-          INSERT INTO employees (username, password, is_admin, job)
-          VALUES ($1, $2, $3, $4)
-      `;
-
-    await pool.query(insertQuery, [username, password, isAdminValue, job]);
-
-    res.sendStatus(201); // Send a 201 status code to indicate successful creation
+    const { username, password, job, isAdmin = false } = req.body;
+    if (typeof username !== 'string' || !username.trim() || username.trim().length > 50 ||
+        typeof password !== 'string' || password.length < 12 || password.length > 256 || !password.trim() ||
+        typeof job !== 'string' || !job.trim() || job.trim().length > 100 || typeof isAdmin !== 'boolean') {
+      return res.status(400).json({ error: 'Username (1–50), password (12–256), job (1–100), and boolean isAdmin required' });
+    }
+    await pool.query('INSERT INTO employees (username, password, is_admin, job) VALUES ($1, $2, $3, $4)',
+      [username.trim(), await hashPassword(password), isAdmin, job.trim()]);
+    res.sendStatus(201);
   } catch (error) {
-    console.error('Error creating employee:', error.code || 'UNKNOWN');
-    res.status(500).send('Internal Server Error');
+    if (error.code === '23505') return res.status(409).json({ error: 'Username already exists' });
+    next(error);
   }
 });
 
-
-app.listen(port, host, () => {
-  console.log(`Server is running at http://${host}:${port}`);
-});
-
 // Handle the /schedule endpoint to fetch events
-app.get('/schedule', async (req, res) => {
+app.get('/schedule', requireEmployee, async (req, res) => {
   try {
     // Fetch events from the database
     const query = `
-      SELECT id, name, email, phone, party_size, event_duration, event_name, event_date, event_time, description_info, cateringcheckbox, equipmentcheckbox, cooksneeded, staffneeded
+      SELECT party_size, event_duration, event_name, event_date, event_time, description_info, cateringcheckbox, equipmentcheckbox, cooksneeded, staffneeded
       FROM eventinfo
     `;
 
@@ -606,6 +632,9 @@ app.get('/schedule', async (req, res) => {
       formattedEvent.availableStaff = resultAvailabilityEventStaff.rows.map(row => row.username);
 
 
+      // Counts are used internally for suggestions; neither calendar renders them.
+      delete formattedEvent.cooksneeded;
+      delete formattedEvent.staffneeded;
       return formattedEvent;
     }));
 
@@ -617,3 +646,19 @@ app.get('/schedule', async (req, res) => {
   }
 });
 
+
+// Do not let default Express error pages/logs echo submitted values or session details.
+app.use((error, req, res, next) => {
+  console.error('Request failed:', error.code || 'UNKNOWN');
+  if (res.headersSent) return next(error);
+  res.status(error.status === 400 || error.status === 413 ? error.status : 500).send('Request failed');
+});
+
+initializeDatabase().then(async () => {
+  dummyPasswordHash = await hashPassword(require('node:crypto').randomBytes(32).toString('hex'));
+  app.listen(port, host, () => console.log(`Server is running at http://${host}:${port}`));
+}).catch(async error => {
+  console.error('Database initialization failed:', error.code || 'UNKNOWN');
+  await pool.end();
+  process.exitCode = 1;
+});
