@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/admin.css">
+    <title>Admin Panel</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src='https:/cdn.jsdelivr.net/npm/fullcalendar/index.global.min.js'></script>
+    <script src="/admin.js" defer></script>
+    <style>
+        
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+          <img src="images/testlogoTrans.png" alt="Your Logo">
+        </div>
+        <nav>
+          <ul>
+            <li><a href="/index.html">Home</a></li>
+            <li><a href="form.html">Event Entry</a></li>
+            <li><a href="login.html">Employee Login</a></li>
+            <li id="workScheduleContainer">
+
+            </li>
+          </ul>
+        </nav>
+      </header>
+
+    <h2>Create New Employee</h2>
+    <form id="createEmployeeForm">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+
+        <label for="job">Job:</label>
+        <input type="job" id="job" name="job" required>
+        
+        <label for="isAdmin">Is Admin:</label>
+        <input type="checkbox" id="isAdmin" name="isAdmin">
+        
+        <button type="submit">Create Employee</button>
+    </form>
+
+    <!-- Calendar to display events -->
+    <div class ='container'>
+        <div id="calendar"></div>
+      </div>
+
+     
+
+    <script>
+
+document.getElementById('createEmployeeForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const requestBody = {};
+
+    formData.forEach((value, key) => {
+        console.log(value);
+        if (key === 'isAdmin') {
+            
+            // If the checkbox is checked, set its value to true, otherwise set it to false
+            requestBody[key] = form[key].checked;
+        } else {
+            console.log('hi');
+            requestBody[key] = value;
+        }
+    });
+
+    try {
+        const response = await fetch('/create_employee', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (response.ok) {
+            alert('Employee created successfully!');
+            form.reset();
+        } else {
+            alert('Failed to create employee');
+        }
+    } catch (error) {
+        console.error('Error creating employee:', error);
+        alert('Internal Server Error');
+    }
+});
+
+    </script>
+     <script src="/admin.js"></script>
+</body>
+</html>
+
+
+
+
+
+

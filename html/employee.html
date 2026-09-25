@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brookings Activity Center Event Scheduling</title>
+  <link rel="stylesheet" href="/css/employee.css">
+  <script src="/employeeScript.js" defer></script>
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">
+      <img src="/images/testlogoTrans.png" alt="Your Logo">
+    </div>
+    <nav>
+      <ul>
+        <li><a href="/index.html">Home</a></li>
+        <li><a href="form.html">Event Entry</a></li>
+        <li><a href="employee.html">Employee Login</a></li>
+        <li id="workScheduleContainer">
+          <a href="#" id="workScheduleLink">Employee Links</a>
+          <ul id="workScheduleSubMenu" style="display: none;">
+            <li><a href="viewSchedule.html">View Schedule</a></li>
+            <li><a href="employee.html" id="employeePageLink">Log Availability</a></li>
+
+          </ul>
+        </li>
+        
+        
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <form id="availabilityForm" onsubmit="return validateAvailabilityForm()" action="http://localhost:3000/submit_availability"
+      method="POST">
+      <h2>Availability Information</h2>
+
+      <h2>Please Enter Your Availability for the Upcoming Week</h2>
+
+      <label for="dateSelect">Select Date:</label>
+      <select id="dateSelect" name="dateSelect">
+        <option value="">Select Date</option>
+      </select>
+
+      <!-- Hidden input field to store the selected date -->
+      <input type="hidden" id="selectedDate" name="selectedDate">
+
+      <label for="shift1Dropdown">Shift 1: 5:00 AM - 1:00 PM (8 hours)</label>
+      <select id="shift1Dropdown" name="shift1Dropdown">
+        <option value="Blank">Please Select</option>
+        <option value="Available">Available</option>
+        <option value="Not Available">Not Available</option>
+      </select>
+
+      <label for="shift2Dropdown">Shift 2: 1:00 PM - 9:00 PM (8 hours)</label>
+      <select id="shift2Dropdown" name="shift2Dropdown">
+        <option value="Blank">Please Select</option>
+        <option value="Available">Available</option>
+        <option value="Not Available">Not Available</option>
+      </select>
+
+      <label for="shift3Dropdown">Shift 3: 9:00 PM - 3:00 AM (6 hours)</label>
+      <select id="shift3Dropdown" name="shift3Dropdown">
+        <option value="Blank">Please Select</option>
+        <option value="Available">Available</option>
+        <option value="Not Available">Not Available</option>
+      </select>
+      <input type="hidden" id="userId" name="userId">
+
+
+
+      <button type="submit">Submit Availability Request</button>
+    </form>
+  </main>
+</body>
+
+</html>

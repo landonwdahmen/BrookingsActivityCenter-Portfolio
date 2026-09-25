@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brookings Activity Center Event Scheduling</title>
+    <link rel="stylesheet" href="/css/styleform.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    
+    <header>
+        <div class="logo">
+            <img src="/images/testlogoTrans.png" alt="Your Logo">
+        </div>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="form.html">Event Entry</a></li>
+                <li><a href="login.html">Employee Login</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <form id="eventForm" onsubmit="return validateForm()" action="http://localhost:3000/submit_form" method="POST">
+            <h2>Customer Information</h2>
+
+            <label for="contactName">Name:</label>
+            <input type="text" id="contactName" name="contactName" required>
+
+            <label for="contactEmail">Email:</label>
+            <input type="email" id="contactEmail" name="contactEmail" required>
+
+            <label for="contactPhone">Phone Number:</label>
+            <input type="tel" id="contactPhone" name="contactPhone" required>
+
+            <label for="partySize">Expected Party Size:</label>
+            <input type="number" id="partySize" name="partySize" required>
+
+            <label for="eventDuration">Expected Duration of Event (hours):</label>
+            <input type="number" id="eventDuration" name="eventDuration" required>
+
+            <h2>Event Details</h2>
+
+            <label for="eventName">Event Name:</label>
+            <input type="text" id="eventName" name="eventName" required>
+
+            <label for="eventDate">Event Date:</label>
+            <input type="date" id="eventDate" name="eventDate" required>
+
+            <label for="eventTime">Event Time:</label>
+            <input type="time" id="eventTime" name="eventTime" required>
+
+            <h2>Room Selection</h2>
+
+            <label>Select one or more rooms:</label>
+
+            <div>
+                <input type="checkbox" id="roomConventionCenter" name="roomConventionCenter">
+                <label for="roomConventionCenter">Convention Center</label>
+            </div>
+
+            <div>
+                <input type="checkbox" id="roomConventionCenterA" name="roomConventionCenterA">
+                <label for="roomConventionCenterA">Convention Center A</label>
+            </div>
+
+            <div>
+                <input type="checkbox" id="roomConventionCenterB" name="roomConventionCenterB">
+                <label for="roomConventionCenterB">Convention Center B</label>
+            </div>
+
+            <div>
+                <input type="checkbox" id="roomBallroom" name="roomBallroom">
+                <label for="roomBallroom">Ballroom</label>
+            </div>
+
+            <div>
+                <input type="checkbox" id="roomBallroomA" name="roomBallroomA">
+                <label for="roomBallroomA">Ballroom A</label>
+            </div>
+
+            <div>
+                <input type="checkbox" id="roomBallroomB" name="roomBallroomB">
+                <label for="roomBallroomB">Ballroom B</label>
+            </div>
+
+            <div>
+                <input type="checkbox" id="roomTheater" name="roomTheater">
+                <label for="roomTheater">Theater</label>
+            </div>
+
+            <h2>Catering</h2>
+
+            <label for="cateringCheckbox">Do you want catering? (Catering specifics will be handled after event confirmation)</label>
+            <select id="cateringCheckbox" name="cateringCheckbox">
+                <option value="Blank"> </option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+            </select>
+
+            <div id="cateringSection" style="display: none;">
+                <p>Catering details or additional options can be added here.</p>
+            </div>
+
+            <h2>Equipment</h2>
+
+            <label for="equipmentCheckbox">Do you need equipment?</label>
+            <select id="equipmentCheckbox" name="equipmentCheckbox">
+                <option value="Blank"> </option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+            </select>
+
+            <div id="equipmentSection" style="display: none;">
+                <label for="chairsAmount">Number of Chairs:</label>
+                <input type="number" id="chairsAmount" name="chairsAmount" min="0">
+
+                <label for="tablesAmount">Number of Tables:</label>
+                <input type="number" id="tablesAmount" name="tablesAmount" min="0">
+            </div>
+
+            <label for="description_info">Event Description:</label>
+            <input type="text" id="description_info" name="description_info" required>
+
+            <button type="submit">Submit Event Request</button>
+        </form>
+    </main>
+</body>
+</html>
+
+
+
+
+

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Staff Schedule</title>
+  <script src='https:/cdn.jsdelivr.net/npm/fullcalendar/index.global.min.js'></script>
+  <link rel="stylesheet" href="/css/viewSchedule.css">
+</head>
+
+<body>
+
+  
+
+  <header>
+    <div class="logo">
+      <img src="/images/testlogoTrans.png" alt="Your Logo">
+    </div>
+    <nav>
+      <ul>
+        <li><a href="/index.html">Home</a></li>
+        <li><a href="/html/form.html">Event Entry</a></li>
+        <li><a href="/login.html">Employee Login</a></li>
+        <li id="workScheduleContainer">
+          <a href="#" id="workScheduleLink">Employee Links</a>
+          <ul id="workScheduleSubMenu" style="display: none;">
+            <li><a href="/html/viewSchedule.html">View Schedule</a></li>
+            <li><a href="employee.html">Log Availability</a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+  </header>
+  <div class ='container'>
+    <div id="calendar"></div>
+  </div>
+  <script src="/viewSchedule.js"></script>
+</body>
+
+</html>
