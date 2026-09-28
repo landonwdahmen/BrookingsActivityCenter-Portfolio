@@ -4,6 +4,7 @@ const PgSession = require('connect-pg-simple')(session);
 const { hashPassword, verifyPassword, isPasswordHash } = require('./auth');
 const { Pool } = require('pg');
 const path = require('path');
+const { roomFields, validDate, validateEvent, coveredShifts } = require('./event-rules');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Initialize Express app
@@ -39,7 +40,7 @@ app.use(express.urlencoded({ extended: false, limit: '16kb', parameterLimit: 100
 for (const directory of ['css', 'images']) {
   app.use('/' + directory, express.static(path.join(__dirname, directory), { dotfiles: 'deny', index: false }));
 }
-for (const file of ['script.js', 'admin.js', 'employeeScript.js', 'viewSchedule.js']) {
+for (const file of ['script.js', 'admin.js', 'employeeScript.js', 'viewSchedule.js', 'calendar.js']) {
   app.get('/' + file, (req, res) => res.sendFile(path.join(__dirname, file)));
 }
 app.get(['/', '/index.html'], (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
@@ -154,11 +155,6 @@ CREATE TABLE IF NOT EXISTS availability (
 // Create sequence for id column
 const createSequence = `
   CREATE SEQUENCE IF NOT EXISTS employees_id_seq;
-`;
-
-// Set initial value for sequence
-const setInitialSequenceValue = `
-  SELECT setval('employees_id_seq', COALESCE((SELECT MAX(id)+1 FROM employees), 1), false);
 `;
 
 // Public academic demo credentials are hashed before any database insertion.
@@ -362,10 +358,14 @@ async function initializeDatabase() {
   try {
     await client.query('BEGIN');
     await client.query(createEventInfoTable);
+    // Additive storage for controls already present in the academic event form.
+    await client.query(`ALTER TABLE eventinfo
+      ADD COLUMN IF NOT EXISTS rooms TEXT[] NOT NULL DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS chairs_amount INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS tables_amount INTEGER NOT NULL DEFAULT 0`);
     await client.query(eventsTestData);
     await client.query(createEmployeesTable);
     await client.query(createSequence);
-    //await client.query(setInitialSequenceValue);
     await client.query('ALTER TABLE employees ALTER COLUMN password TYPE TEXT');
     const accounts = await client.query('SELECT id, password FROM employees FOR UPDATE');
     const legacy = accounts.rows.filter(row => !isPasswordHash(row.password));
@@ -408,61 +408,34 @@ async function initializeDatabase() {
 
 
 app.post('/submit_form', async (req, res) => {
+  const errorMessage = validateEvent(req.body);
+  if (errorMessage) return res.status(400).send(errorMessage);
   try {
-    const {
-      contactName,
-      contactEmail,
-      contactPhone,
-      partySize,
-      eventDuration,
-      eventName,
-      eventDate,
-      eventTime,
-      description_info,
-      cateringCheckbox,
-      equipmentCheckbox,
-      chairsAmount,
-      tablesAmount,
-    } = req.body;
-    // Calculate cooksNeeded based on cateringCheckbox
-    const cooksNeeded = cateringCheckbox ? Math.ceil(partySize / 50) : 0;
+    const body = req.body;
+    const catering = body.cateringCheckbox === 'yes';
+    const equipment = body.equipmentCheckbox === 'yes';
+    const partySize = Number(body.partySize);
+    // Preserve the original academic formulas; only correct Yes/No interpretation.
+    const cooksNeeded = catering ? Math.ceil(partySize / 50) : 0;
     const staffNeeded = 2 + Math.ceil(partySize / 50);
-
-    const insertQuery = `
-            INSERT INTO eventinfo
-            (name, email, phone, party_size, event_duration, event_name, event_date, event_time, description_info, cateringCheckbox, equipmentCheckbox, cooksNeeded, staffNeeded)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING id
-        `;
-
-    const result = await pool.query(insertQuery, [
-      contactName,
-      contactEmail,
-      contactPhone,
-      partySize,
-      eventDuration,
-      eventName,
-      eventDate,
-      eventTime,
-      description_info,
-      cateringCheckbox,
-      equipmentCheckbox,
-      cooksNeeded,
-      staffNeeded
+    const rooms = roomFields.filter(field => body[field] === 'on' || body[field] === true);
+    await pool.query(`INSERT INTO eventinfo
+      (name, email, phone, party_size, event_duration, event_name, event_date, event_time,
+       description_info, cateringcheckbox, equipmentcheckbox, cooksneeded, staffneeded,
+       rooms, chairs_amount, tables_amount)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, [
+      body.contactName.trim(), body.contactEmail.trim(), body.contactPhone.trim(), partySize,
+      Number(body.eventDuration), body.eventName.trim(), body.eventDate, body.eventTime,
+      body.description_info.trim(), catering, equipment, cooksNeeded, staffNeeded, rooms,
+      equipment ? Number(body.chairsAmount || 0) : 0, equipment ? Number(body.tablesAmount || 0) : 0,
     ]);
-
-    const customerId = result.rows[0].id;
-
-
-    res.redirect(`form.html`)
+    res.redirect(303, '/form.html?submitted=1');
   } catch (error) {
+    if (error.code === '23505') return res.status(409).send('An event with that name already exists.');
     console.error('Error submitting form:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });
-
-
-
 
 // Use a valid dummy hash for unknown accounts to reduce username timing differences.
 let dummyPasswordHash;
@@ -491,81 +464,23 @@ app.post('/logout', (req, res, next) => {
 });
 
 app.post('/submit_availability', requireEmployee, async (req, res) => {
+  const { selectedDate, shift1Dropdown, shift2Dropdown, shift3Dropdown } = req.body;
+  if (!validDate(selectedDate) || ![shift1Dropdown, shift2Dropdown, shift3Dropdown]
+      .every(value => ['Available', 'Not Available'].includes(value))) {
+    return res.status(400).send('Select a valid date and availability for all three shifts.');
+  }
   try {
-    const {
-      selectedDate,
-      shift1Dropdown,
-      shift2Dropdown,
-      shift3Dropdown
-    } = req.body;
-
-    const userId = req.employee.id;
-
-    // Check if availability exists for the selected date
-    const availabilityCheckQuery = `
-      SELECT COUNT(*) AS count
-      FROM availability
-      WHERE user_id = $1
-      AND date = $2
-    `;
-    const availabilityCheckResult = await pool.query(availabilityCheckQuery, [userId, selectedDate]);
-    const availabilityCount = availabilityCheckResult.rows[0].count;
-
-    if (availabilityCount > 0) {
-      // Update existing availability
-      const updateQuery = `
-        UPDATE availability
-        SET SHIFT_1 = $1, SHIFT_2 = $2, SHIFT_3 = $3
-        WHERE user_id = $4 AND date = $5
-      `;
-      await pool.query(updateQuery, [shift1Dropdown, shift2Dropdown, shift3Dropdown, userId, selectedDate]);
-    } else {
-      // Insert new availability
-      const employeeQuery = `
-        SELECT username 
-        FROM employees 
-        WHERE id = $1
-      `;
-      const employeeResult = await pool.query(employeeQuery, [userId]);
-      const employeeName = employeeResult.rows[0].username;
-
-      const employeeJobQuery = `
-        SELECT job 
-        FROM employees 
-        WHERE id = $1
-      `;
-      const employeeJobResult = await pool.query(employeeJobQuery, [userId]);
-      const employeeJob = employeeJobResult.rows[0].job;
-
-      const insertQuery = `
-        INSERT INTO availability
-        (user_id, username, date, SHIFT_1, SHIFT_2, SHIFT_3, job)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `;
-      await pool.query(insertQuery, [
-        userId,  // Identity comes only from the authenticated session
-        employeeName,
-        selectedDate,
-        shift1Dropdown,
-        shift2Dropdown,
-        shift3Dropdown,
-        employeeJob
-      ]);
-    }
-
-    res.redirect('/employee.html');
-
-
+    await pool.query(`INSERT INTO availability (user_id, username, date, shift_1, shift_2, shift_3, job)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (username, date) DO UPDATE SET user_id=EXCLUDED.user_id,
+        shift_1=EXCLUDED.shift_1, shift_2=EXCLUDED.shift_2, shift_3=EXCLUDED.shift_3, job=EXCLUDED.job`,
+      [req.employee.id, req.employee.username, selectedDate, shift1Dropdown, shift2Dropdown, shift3Dropdown, req.employee.job]);
+    res.redirect('/employee.html?submitted=1');
   } catch (error) {
     console.error('Error submitting shift availability:', error.code || 'UNKNOWN');
     res.status(500).send('Internal Server Error');
   }
 });
-
-
-
-
-
 
 // Account creation is an administrator operation, including creation of another admin.
 app.post('/create_employee', requireEmployee, requireAdmin, async (req, res, next) => {
@@ -590,52 +505,28 @@ app.get('/schedule', requireEmployee, async (req, res) => {
   try {
     // Fetch events from the database
     const query = `
-      SELECT party_size, event_duration, event_name, event_date, event_time, description_info, cateringcheckbox, equipmentcheckbox, cooksneeded, staffneeded
+      SELECT party_size, event_duration, event_name, to_char(event_date, 'YYYY-MM-DD') AS event_date, to_char(event_time, 'HH24:MI') AS event_time, description_info, cateringcheckbox, equipmentcheckbox, cooksneeded, staffneeded
       FROM eventinfo
     `;
 
 
     const resultEvents = await pool.query(query);
-    // Fetch available cooks from the availability table
-    const queryAvailabilityCooks = `
-      SELECT username
-      FROM availability
-      WHERE (job = 'cook' or job = 'Cook') AND date = $1
-      LIMIT $2
-    `;
-
-    const queryAvailabilityEventStaff = `
-      SELECT username
-      FROM availability
-      WHERE job = 'Event Staff' AND date = $1
-      LIMIT $2
-    `;
-
-
     const formattedEvents = await Promise.all(resultEvents.rows.map(async event => {
-      // Format event_date and event_time before sending the response
-      const formattedEvent = {
-        ...event,
-        event_date: event.event_date.toISOString().split('T')[0], // Format event_date as 'YYYY-MM-DD'
-        event_time: event.event_time.slice(0, 5) // Extract time part of event_time (e.g., '10:00')
+      const shifts = coveredShifts(event.event_time, event.event_duration);
+      let candidates = [];
+      if (shifts.length) {
+        // Column names come exclusively from coveredShifts, never request input.
+        const available = shifts.map(field => `a.${field} = 'Available'`).join(' AND ');
+        candidates = (await pool.query(`SELECT e.username, e.job FROM availability a
+          JOIN employees e ON e.id = a.user_id AND e.username = a.username
+          WHERE a.date = $1 AND ${available} ORDER BY e.id`, [event.event_date])).rows;
+      }
+      const { cooksneeded, staffneeded, ...fields } = event;
+      return {
+        ...fields,
+        availableCooks: event.cateringcheckbox ? candidates.filter(row => row.job.toLowerCase() === 'cook').slice(0, Math.max(0, cooksneeded)).map(row => row.username) : [],
+        availableStaff: candidates.filter(row => row.job === 'Event Staff').slice(0, Math.max(0, staffneeded)).map(row => row.username),
       };
-
-      // Retrieve available cooks
-      const resultAvailabilityCooks = await pool.query(queryAvailabilityCooks, [formattedEvent.event_date, formattedEvent.cooksneeded]);
-
-
-      // Retrieve available event staff
-      const resultAvailabilityEventStaff = await pool.query(queryAvailabilityEventStaff, [formattedEvent.event_date, formattedEvent.staffneeded]);
-
-      // Add available cooks and event staff to the event data
-      formattedEvent.availableCooks = resultAvailabilityCooks.rows.map(row => row.username);
-      formattedEvent.availableStaff = resultAvailabilityEventStaff.rows.map(row => row.username);
-
-
-      // Counts are used internally for suggestions; neither calendar renders them.
-      delete formattedEvent.cooksneeded;
-      delete formattedEvent.staffneeded;
-      return formattedEvent;
     }));
 
     res.json(formattedEvents); // Send events data as JSON response

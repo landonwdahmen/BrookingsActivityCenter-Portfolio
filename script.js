@@ -1,129 +1,33 @@
-function validateForm() {
-    // Get the selected date and time
-    var selectedDate = new Date(document.getElementById('eventDate').value + ' ' + document.getElementById('eventTime').value);
-
-    // Check if the event time is between 3 am and 5 am
-    var eventHour = selectedDate.getHours();
-    if (eventHour >= 3 && eventHour < 5) {
-        alert('Events cannot be scheduled between 3 am and 5 am.');
-        return false;
-    }
-
-    // Check if equipment is selected and validate the amount of chairs and tables
-    var equipmentCheckbox = document.getElementById('equipmentCheckbox');
-    var equipmentSection = document.getElementById('equipmentSection');
-    var chairsAmount = document.getElementById('chairsAmount').value;
-    var tablesAmount = document.getElementById('tablesAmount').value;
-
-    if (equipmentCheckbox.value === 'yes') {
-        // Equipment is selected, validate the amount of chairs and tables
-        if (isNaN(chairsAmount) || isNaN(tablesAmount) || chairsAmount < 0 || tablesAmount < 0) {
-            alert('Please enter a valid number of chairs and tables for equipment.');
-            return false;
-        }
-    }
-
-    return true;
+const eventForm = document.getElementById('eventForm');
+const equipmentSelect = document.getElementById('equipmentCheckbox');
+function updateEquipment() {
+  const needed = equipmentSelect.value === 'yes';
+  document.getElementById('equipmentSection').style.display = needed ? 'block' : 'none';
+  for (const id of ['chairsAmount', 'tablesAmount']) document.getElementById(id).disabled = !needed;
 }
-
-document.getElementById('equipmentCheckbox').addEventListener('change', function () {
-    var equipmentSection = document.getElementById('equipmentSection');
-    equipmentSection.style.display = this.value === 'yes' ? 'block' : 'none';
+equipmentSelect.addEventListener('change', updateEquipment);
+updateEquipment();
+eventForm.addEventListener('submit', event => {
+  const data = new FormData(eventForm);
+  const time = data.get('eventTime');
+  if (time >= '03:00' && time < '05:00') {
+    event.preventDefault();
+    alert('Events cannot start between 3 am and 5 am.');
+    return;
+  }
+  if (!eventForm.querySelector('input[name^="room"]:checked')) {
+    event.preventDefault();
+    alert('Select at least one room.');
+    return;
+  }
+  const message = ['Submit this event request?',
+    'Event: ' + data.get('eventName'), 'Date/time: ' + data.get('eventDate') + ' ' + time,
+    'Duration (hours): ' + data.get('eventDuration'), 'Party size: ' + data.get('partySize'),
+    'Description: ' + data.get('description_info'), 'Catering: ' + data.get('cateringCheckbox'),
+    'Equipment: ' + data.get('equipmentCheckbox')].join('\n');
+  // Let the browser submit once; Cancel prevents the native form submission.
+  if (!window.confirm(message)) event.preventDefault();
 });
-
-function displayConfirmationBox() {
-    var formData = getFormData();
-
-    var confirmationMessage = 'Name: ' + formData.contactName + '\n' +
-                              'Email: ' + formData.contactEmail + '\n' +
-                              'Phone: ' + formData.contactPhone + '\n' +
-                              'Party Size: ' + formData.partySize + '\n' +
-                              'Event Duration: ' + formData.eventDuration + ' hours\n' +
-                              'Event Name: ' + formData.eventName + '\n' +
-                              'Event Date: ' + formData.eventDate + '\n' +
-                              'Event Time: ' + formData.eventTime + '\n' +
-                              'Description: ' + formData.description + '\n\n' +
-                              'Do you want catering? ' + formData.cateringCheckbox + '\n' +
-                              'Do you need equipment? ' + formData.equipmentCheckbox + '\n' +
-                              'Event Description: ' + formData.description_info + '\n' +
-                              'Catering Checkbox: ' + formData.cateringCheckbox + '\n' +
-                              'Equipment Checkbox: ' + formData.equipmentCheckbox + '\n' +
-                              'Cooks Needed: ' + formData.cooksNeeded;
-
-    var userConfirmed = window.confirm(confirmationMessage);
-
-    if (userConfirmed) {
-        event.preventDefault();
-        document.getElementById('eventForm').submit();
-    }
-    else {
-        // If user clicks Cancel, do nothing
-        return false;
-    }
-    // If user clicks Cancel, do nothing
+if (new URLSearchParams(location.search).get('submitted') === '1') {
+  document.getElementById('submissionStatus').textContent = 'Event request saved.';
 }
-
-function getFormData() {
-    var formData = {};
-    formData.contactName = document.getElementById('contactName').value;
-    formData.contactEmail = document.getElementById('contactEmail').value;
-    formData.contactPhone = document.getElementById('contactPhone').value;
-    formData.partySize = parseInt(document.getElementById('partySize').value);
-    formData.eventDuration = document.getElementById('eventDuration').value;
-    formData.eventName = document.getElementById('eventName').value;
-    formData.eventDate = document.getElementById('eventDate').value;
-    formData.eventTime = document.getElementById('eventTime').value;
-    formData.description = document.getElementById('description').value;
-    formData.cateringCheckbox = document.getElementById('cateringCheckbox').checked;
-    formData.equipmentCheckbox = document.getElementById('equipmentCheckbox').checked;
-    formData.description_info = document.getElementById('description_info').value;
-
-    return formData;
-}
-function displayConfirmationBox() {
-    var formData = getFormData();
-   
-
-    var confirmationMessage = 'Contact Name: ' + formData.contactName + '\n' +
-                              'Contact Email: ' + formData.contactEmail + '\n' +
-                              'Contact Phone: ' + formData.contactPhone + '\n' +
-                              'Party Size: ' + formData.partySize + '\n' +
-                              'Event Duration: ' + formData.eventDuration;
-
-    var userConfirmed = window.confirm(confirmationMessage);
-
-    if (userConfirmed) {
-        // Prevent default form submission action
-        event.preventDefault();
-        document.getElementById('availabilityForm').submit();
-    }
-    else {
-        // If user clicks Cancel, do nothing
-        return false;
-    }
-}
-
-
-document.getElementById('eventForm').addEventListener('submit', function (event) {
-    // Validate the form
-    var isValid = validateForm();
-
-    // If the form is valid, display the confirmation box
-    if (isValid) {
-        // Display confirmation box
-        var confirmed = displayConfirmationBox();
-
-        // If the user confirmed, proceed with form submission
-        if (!confirmed) {
-            // Prevent default form submission action
-            event.preventDefault();
-        }
-    } else {
-        // Prevent default form submission action if form is not valid
-        event.preventDefault();
-    }
-});
-
-
-
-  

@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/css/admin.css">
     <title>Admin Panel</title>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <script src='https:/cdn.jsdelivr.net/npm/fullcalendar/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js'></script>
+    <script src="/calendar.js" defer></script>
     <script src="/admin.js" defer></script>
     <style>
         
@@ -15,16 +15,14 @@
 <body>
     <header>
         <div class="logo">
-          <img src="images/testlogoTrans.png" alt="Your Logo">
+          <img src="/images/testlogoTrans.png" alt="Your Logo">
         </div>
         <nav>
           <ul>
             <li><a href="/index.html">Home</a></li>
-            <li><a href="form.html">Event Entry</a></li>
-            <li><a href="login.html">Employee Login</a></li>
-            <li id="workScheduleContainer">
-
-            </li>
+            <li><a href="/form.html">Event Entry</a></li>
+            <li><a href="/login.html">Employee Login</a></li>
+            <li><a href="/employee.html">Log Availability</a></li>
           </ul>
         <form action="/logout" method="POST"><button type="submit">Log out</button></form>
     </nav>
@@ -39,7 +37,7 @@
         <input type="password" id="password" name="password" minlength="12" maxlength="256" required>
 
         <label for="job">Job:</label>
-        <input type="job" id="job" name="job" required>
+        <input type="text" id="job" name="job" required>
         
         <label for="isAdmin">Is Admin:</label>
         <input type="checkbox" id="isAdmin" name="isAdmin">
@@ -94,7 +92,6 @@ document.getElementById('createEmployeeForm').addEventListener('submit', async (
 });
 
     </script>
-     <script src="/admin.js"></script>
 </body>
 </html>
 
