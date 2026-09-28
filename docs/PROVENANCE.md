@@ -1,6 +1,6 @@
 # Source provenance
 
-This repository was reconstructed later from the final submitted source of the 2023â€“2024 Brookings Activity Center academic team project. The original project was a course scenario, not a production deployment or a real external-client system.
+This repository was reconstructed later from the final submitted source of the 2023–2024 Brookings Activity Center academic team project. The original project was a course scenario, not a production deployment or a real external-client system.
 
 ## Original academic team
 
@@ -31,4 +31,4 @@ Authentication was committed as `4bcd6e3`. The third portfolio pass repairs even
 
 The original [README.txt](../README.txt) is preserved as an artifact. The tag retains the submitted source; the working tree may include later changes. Use `git diff academic-final-snapshot --` to inspect the distinction for tracked files, and `git status --short` to see new untracked documentation before it is committed. Future work should continue documenting this distinction without claiming original individual feature ownership.
 
-The functionality repairs were committed as `e1f19a2`. The fourth portfolio pass formalizes npm checks and sequential integration tests, shares test-only cleanup helpers, adds GitHub Actions validation with a disposable PostgreSQL service, and verifies fresh setup. These engineering improvements are later portfolio modernization; application behavior and the historical academic audit are preserved. See [testing and CI](TESTING.md).
+The functionality repairs were committed as `e1f19a2`. The fourth portfolio pass, committed as `effd43c` (`ci: add repeatable test and validation workflow`), formalizes npm checks and sequential integration tests, shares test-only cleanup helpers, adds GitHub Actions validation with a disposable PostgreSQL service, and verifies fresh setup. These engineering improvements are later portfolio modernization; application behavior and the historical academic audit are preserved. See [testing and CI](TESTING.md).

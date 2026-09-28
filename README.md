@@ -4,7 +4,7 @@ A **2023–2024 academic team project** for event-request intake, employee avail
 
 **Original team:** Landon Dahmen, Zander Wysong, Telson Cowan, and Jake McBride. The original implementation is shared team work; no individual feature ownership is claimed.
 
-This portfolio repository was created later from the final submitted source. Its Git history starts with import commit `2e64bca`, tagged `academic-final-snapshot`; it is **not the original team's development history**. Later commits are post-course modernization. Publication permission was granted; seeded records are fake and sample passwords were never reused for real systems. See [provenance](docs/PROVENANCE.md), the unchanged [historical audit](docs/AUDIT-BASELINE.md), and preserved [original README](README.txt).
+This portfolio copy starts with the final-submission import, tagged `academic-final-snapshot`; its Git history is **not the original team's development history**. Later commits are post-course modernization. See [team provenance and publication permission](docs/PROVENANCE.md).
 
 ## Stack and functionality
 
@@ -23,7 +23,7 @@ Use Node.js **24 LTS**, npm, and Docker Compose v2 or newer. Calendar rendering 
 
 ```powershell
 # Only copy when .env does not already exist.
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 # Paste that generated value into SESSION_SECRET in .env.
 npm ci
@@ -31,7 +31,7 @@ docker compose up -d --wait postgres
 npm start
 ```
 
-Open [the application](http://127.0.0.1:3000/) and [employee login](http://127.0.0.1:3000/login.html). Demo credentials: `Johnny` / `123` (admin), `Tom` / `isCool` (employee). Use only fake data and disposable passwords.
+Open [the application](http://127.0.0.1:3000/) and [employee login](http://127.0.0.1:3000/login.html). Demo credentials: `Johnny` / `123` (admin), `Tom` / `isCool` (employee). Seeded records are fake and sample passwords were never reused for real systems. Use only fake data and disposable passwords.
 
 Node and Compose share `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`. Defaults are `bac_demo`, `bac_demo`, and the public placeholder `local-demo-only`. If port 5432 is occupied, change `DB_PORT` in `.env` before startup; do not stop another service. Express defaults to `127.0.0.1:3000`. `.env` and `node_modules` are ignored; the lockfile is retained. Shell environment values override `.env`.
 
@@ -57,6 +57,6 @@ The **BAC validation** GitHub Actions workflow runs on pushes and pull requests:
 
 ## Limits
 
-This remains a local portfolio demo, not production-ready software. Known weak demo accounts, missing login throttling/MFA/account recovery, and incomplete abuse controls remain. HTTPS/proxy deployment needs separate validation.
+This remains a local portfolio demo, not production-ready software. Known weak demo accounts, missing login throttling/MFA/account recovery, and incomplete abuse controls remain. HTTPS/proxy deployment needs separate validation. The [historical audit](docs/AUDIT-BASELINE.md) and [original README](README.txt) describe earlier states; use the setup instructions above for the current version.
 
 Staffing names are **suggestions, not assignments**. Overnight availability-date ownership is unresolved, so ambiguous overnight events receive no suggestions. Overlapping events can suggest the same employee. There is no persistent assignment, conflict prevention, room-conflict policy, optimizer, venue timezone/DST policy, payment processing, or attendee ticketing. No license has been added.
