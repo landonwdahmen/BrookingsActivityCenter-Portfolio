@@ -1,5 +1,7 @@
 # Brookings Activity Center
 
+[![BAC validation](https://github.com/landonwdahmen/BrookingsActivityCenter-Portfolio/actions/workflows/ci.yml/badge.svg)](https://github.com/landonwdahmen/BrookingsActivityCenter-Portfolio/actions/workflows/ci.yml)
+
 A **2023–2024 academic team project** for event-request intake, employee availability, calendar viewing, and basic staffing suggestions. It was a course scenario, not a production deployment or a real external-client system.
 
 **Original team:** Landon Dahmen, Zander Wysong, Telson Cowan, and Jake McBride. The original implementation is shared team work; no individual feature ownership is claimed.
@@ -53,7 +55,7 @@ Remove-Item Env:AUTH_SMOKE_TEST, Env:FUNCTIONALITY_SMOKE_TEST
 
 `npm test` runs authentication then functionality against the same database. Individual commands are `npm run test:auth` and `npm run test:functionality`; each still requires its safety flag. `npm run check` / `npm run check:syntax` parse JavaScript and inline HTML scripts without a database. These are focused integration checks with some DOM/calendar doubles, not broad unit coverage or real-browser end-to-end tests.
 
-The **BAC validation** GitHub Actions workflow runs on pushes and pull requests: Node 24, a health-checked PostgreSQL service, `npm ci`, production-dependency audit, syntax checks, and both suites. It uses fake CI-only credentials, no repository secrets, and no deployment. Local verification and its limits are recorded in [testing documentation](docs/TESTING.md); adding the workflow does not claim it has already run on GitHub.
+The **BAC validation** GitHub Actions workflow runs on pushes and pull requests: Node 24, a health-checked PostgreSQL service, `npm ci`, production-dependency audit, syntax checks, and both suites. It uses fake CI-only credentials, no repository secrets, and no deployment. Local verification and its limits are recorded in [testing documentation](docs/TESTING.md). The workflow has also been validated successfully on GitHub-hosted Actions.
 
 ## Limits
 
