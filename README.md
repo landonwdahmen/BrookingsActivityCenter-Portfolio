@@ -19,6 +19,20 @@ Node.js / Express, PostgreSQL with `pg`, vanilla JavaScript / HTML / CSS, FullCa
 
 Post-course passes added repository/configuration hygiene, authentication/authorization, form/calendar repairs, and now explicit check/test commands and CI. Details: [authentication](docs/AUTHENTICATION.md), [functionality and shift limits](docs/FUNCTIONALITY.md), [testing and CI](docs/TESTING.md).
 
+## Screenshots
+
+### Event Schedule Calendar
+
+![Event Schedule Calendar](docs/images/schedule-calendar.png)
+
+### Event Request Form
+
+![Event Request Form](docs/images/event-request-form.png)
+
+### Employee Availability
+
+![Employee Availability](docs/images/employee-availability.png)
+
 ## Run locally
 
 Use Node.js **24 LTS**, npm, and Docker Compose v2 or newer. Calendar rendering requires access to its CDN. From the repository root in PowerShell:
