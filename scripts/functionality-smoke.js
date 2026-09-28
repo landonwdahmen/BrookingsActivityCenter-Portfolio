@@ -7,6 +7,7 @@ const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const { Pool } = require('pg');
+const { cleanupSmoke, trackSession } = require('./smoke-support');
 const { coveredShifts } = require('../event-rules');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
@@ -60,13 +61,7 @@ async function main() {
     ...(data === undefined ? {} : { body: new URLSearchParams(data) }) });
   async function login(username, password) {
     const response = await request('/login', null, { username, password });
-    const header = response.headers.get('set-cookie');
-    // Track even the admin login's exact session; never delete other admin sessions.
-    const cookie = header?.split(';')[0];
-    if (cookie) {
-      const signed = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1));
-      if (signed.startsWith('s:')) sessionIds.add(signed.slice(2, signed.lastIndexOf('.')));
-    }
+    const cookie = trackSession(response.headers.get('set-cookie'), sessionIds);
     assert.equal(response.status, 302);
     assert(cookie, 'Login did not set a session cookie');
     return cookie;
@@ -95,7 +90,7 @@ async function main() {
     }
     pass('shift boundaries, overnight conservatism, Sunday/Monday/year-rollover dates');
     child = spawn(process.execPath, ['server.js'], { cwd: path.join(__dirname, '..'), windowsHide: true,
-      env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', NODE_ENV: 'development', SESSION_COOKIE_SECURE: 'false', TRUST_PROXY: 'false' },
+      env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', NODE_ENV: 'development', SESSION_COOKIE_SECURE: 'false', TRUST_PROXY: 'false', MIGRATE_LEGACY_PASSWORDS: 'false' },
       stdio: ['ignore', 'pipe', 'pipe'] });
     child.on('error', error => { childError = error; });
     let logs = '';
@@ -148,7 +143,7 @@ async function main() {
     for (const [suffix, job] of [['cook', 'cook'], ['staff', 'Event Staff']]) {
       const username = prefix + '_' + suffix;
       usernames.push(username);
-      const response = await fetch(base + '/create_employee', { method: 'POST', headers: { Cookie: admin, 'Content-Type': 'application/json' },
+      const response = await fetch(base + '/create_employee', { method: 'POST', signal: AbortSignal.timeout(10000), headers: { Cookie: admin, 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password: prefix, job }) });
       assert.equal(response.status, 201);
       const id = (await pool.query('SELECT id FROM employees WHERE username=$1', [username])).rows[0].id;
@@ -217,65 +212,9 @@ async function main() {
     testError = error;
     throw error;
   } finally {
-    const cleanupErrors = [];
-    const attempt = async (label, action) => {
-      try { await action(); return true; }
-      catch (error) { cleanupErrors.push({ label, error }); return false; }
-    };
-    // Stop writes before removing rows. Bound waits and escalate only this child.
-    const stopped = await attempt('temporary server', () => stopChild(child));
-    await attempt('port probe', async () => {
-      if (probe.listening) await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
-    });
-    const resolved = await attempt('resolve run employee IDs', async () => {
-      const rows = await pool.query('SELECT id FROM employees WHERE username = ANY($1::text[])', [usernames]);
-      for (const row of rows.rows) if (!accounts.includes(row.id)) accounts.push(row.id);
-    });
-    // Child/dependent rows first. Exact run names/IDs only; never a prefix DELETE.
-    if (stopped && resolved) {
-      const availabilityRemoved = await attempt('availability', () => pool.query(
-        'DELETE FROM availability WHERE user_id = ANY($1::int[])', [accounts]));
-      const sessionsRemoved = await attempt('sessions', () => pool.query(
-        "DELETE FROM user_sessions WHERE sid = ANY($1::text[]) OR sess->>'employeeId' = ANY($2::text[])",
-        [[...sessionIds], accounts.map(String)]));
-      if (availabilityRemoved && sessionsRemoved) await attempt('employees', () => pool.query(
-        'DELETE FROM employees WHERE id = ANY($1::int[]) AND username = ANY($2::text[])', [accounts, usernames]));
-    }
-    if (stopped) await attempt('events', () => pool.query(
-      'DELETE FROM eventinfo WHERE event_name = ANY($1::text[])', [names.concat(prefix + '_invalid')]));
-    await attempt('verify no run records remain', async () => {
-      const result = await pool.query(`SELECT
-        (SELECT count(*)::int FROM employees WHERE username = ANY($1::text[])) AS employees,
-        (SELECT count(*)::int FROM availability WHERE user_id = ANY($2::int[]) OR username = ANY($1::text[])) AS availability,
-        (SELECT count(*)::int FROM eventinfo WHERE event_name = ANY($3::text[])) AS events,
-        (SELECT count(*)::int FROM user_sessions WHERE sid = ANY($4::text[]) OR sess->>'employeeId' = ANY($5::text[])) AS sessions`,
-        [usernames, accounts, names.concat(prefix + '_invalid'), [...sessionIds], accounts.map(String)]);
-      assert.deepEqual(result.rows[0], { employees: 0, availability: 0, events: 0, sessions: 0 });
-      console.log('Cleanup verified: ' + JSON.stringify(result.rows[0]));
-    });
-    // Always close the pool, even if another cleanup action failed.
-    await attempt('PostgreSQL pool', () => pool.end());
-    if (cleanupErrors.length) {
-      for (const { label, error } of cleanupErrors) console.error('Cleanup failed:', label, error.code || error.name);
-      // Preserve the original assertion/operational failure; report cleanup failures separately.
-      if (!testError) throw new AggregateError(cleanupErrors.map(item => item.error), 'Functionality cleanup failed');
-    }
+    await cleanupSmoke({ pool, child, probe, accounts, usernames, names: names.concat(prefix + '_invalid'), sessionIds, testError });
   }
 }
 
-async function stopChild(child) {
-  if (!child || !child.pid || child.exitCode !== null || child.signalCode !== null) return;
-  const waitForExit = milliseconds => new Promise(resolve => {
-    const done = () => { clearTimeout(timer); child.removeListener('exit', done); resolve(true); };
-    const timer = setTimeout(() => { child.removeListener('exit', done); resolve(false); }, milliseconds);
-    child.once('exit', done);
-    if (child.exitCode !== null || child.signalCode !== null) done();
-  });
-  const exited = waitForExit(5000);
-  child.kill('SIGTERM');
-  if (await exited) return;
-  const killed = waitForExit(5000);
-  child.kill('SIGKILL');
-  if (!await killed) throw new Error('Temporary server did not exit');
-}
+
 main().catch(error => { console.error('Functionality check failed:', error.message); process.exitCode = 1; });

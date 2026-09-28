@@ -1,6 +1,6 @@
 # Source provenance
 
-This repository was reconstructed later from the final submitted source of the 2023–2024 Brookings Activity Center academic team project. The original project was a course scenario, not a production deployment or a real external-client system.
+This repository was reconstructed later from the final submitted source of the 2023â€“2024 Brookings Activity Center academic team project. The original project was a course scenario, not a production deployment or a real external-client system.
 
 ## Original academic team
 
@@ -30,3 +30,5 @@ The first cleanup was committed as `c68c5c3` (`chore: establish portfolio baseli
 Authentication was committed as `4bcd6e3`. The third portfolio pass repairs event/availability forms, persists existing room/equipment controls, corrects catering interpretation, consolidates calendar loading, normalizes navigation/local date handling, and filters staffing suggestions against documented shift labels. Overnight date ownership and overlap resolution remain explicitly unresolved. See [functionality details](FUNCTIONALITY.md). These repairs are later modernization and do not imply individual ownership of the original team features.
 
 The original [README.txt](../README.txt) is preserved as an artifact. The tag retains the submitted source; the working tree may include later changes. Use `git diff academic-final-snapshot --` to inspect the distinction for tracked files, and `git status --short` to see new untracked documentation before it is committed. Future work should continue documenting this distinction without claiming original individual feature ownership.
+
+The functionality repairs were committed as `e1f19a2`. The fourth portfolio pass formalizes npm checks and sequential integration tests, shares test-only cleanup helpers, adds GitHub Actions validation with a disposable PostgreSQL service, and verifies fresh setup. These engineering improvements are later portfolio modernization; application behavior and the historical academic audit are preserved. See [testing and CI](TESTING.md).

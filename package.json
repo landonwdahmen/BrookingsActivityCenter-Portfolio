@@ -7,7 +7,12 @@
     "connect-pg-simple": "^10.0.0"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node scripts/run-tests.js",
+    "test:auth": "node scripts/auth-smoke.js",
+    "test:functionality": "node scripts/functionality-smoke.js",
+    "check": "npm run check:syntax",
+    "check:syntax": "node scripts/check-syntax.js"
   },
   "name": "brookings-activity-center-portfolio",
   "description": "Portfolio copy of a 2023–2024 academic team event-request and employee scheduling project.",

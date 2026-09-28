@@ -2,11 +2,11 @@
 // Run only against this project's disposable demo DB. No external test framework.
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
-const { once } = require('node:events');
 const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 const net = require('node:net');
 const { Pool } = require('pg');
+const { cleanupSmoke, trackSession } = require('./smoke-support');
 const { hashPassword, verifyPassword, isPasswordHash } = require('../auth');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
@@ -19,13 +19,11 @@ async function main() {
   const suffix = randomBytes(8).toString('hex');
   const username = `authcheck_${suffix}`;
   const password = `Demo-check-${suffix}`;
-  let child, createdId, output = '', checks = 0;
+  let child, createdId, testError, childError, base, output = '', checks = 0;
+  const accounts = [], usernames = [], sessionIds = new Set();
   const pass = label => { checks++; console.log(`PASS ${label}`); };
   const probe = net.createServer();
-  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
-  const port = probe.address().port;
-  await new Promise(resolve => probe.close(resolve));
-  const base = `http://127.0.0.1:${port}`;
+
   async function request(route, cookie, body, extraHeaders = {}) {
     return fetch(base + route, {
       method: body === undefined ? 'GET' : 'POST', redirect: 'manual',
@@ -37,15 +35,20 @@ async function main() {
   }
   async function login(name, value, cookie) {
     const response = await request('/login', cookie, { username: name, password: value });
-    assert.equal(response.status, 302);
     const header = response.headers.get('set-cookie');
+    const sessionCookie = trackSession(header, sessionIds);
+    assert.equal(response.status, 302);
     assert.match(header, /HttpOnly/i);
     assert.match(header, /SameSite=Strict/i);
     assert.doesNotMatch(header, /; Secure/i); // This harness explicitly tests local HTTP.
     assert(!response.headers.get('location').includes('userId'));
-    return header.split(';')[0];
+    return sessionCookie;
   }
   try {
+    await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(0, '127.0.0.1', resolve); });
+    const port = probe.address().port;
+    await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
+    base = `http://127.0.0.1:${port}`;
     const hash = await hashPassword(password);
     assert(isPasswordHash(hash));
     assert(await verifyPassword(password, hash));
@@ -58,11 +61,13 @@ async function main() {
       env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', NODE_ENV: 'development',
         SESSION_COOKIE_SECURE: 'false', TRUST_PROXY: 'false', MIGRATE_LEGACY_PASSWORDS: 'false' },
       stdio: ['ignore', 'pipe', 'pipe'] });
+    child.on('error', error => { childError = error; });
     child.stdout.on('data', value => { output += value; });
     child.stderr.on('data', value => { output += value; });
     let ready = false;
     for (let i = 0; i < 150; i++) {
-      if (child.exitCode !== null) throw Error('Server exited before readiness; check local database configuration.');
+      if (childError) throw childError;
+      if (child.exitCode !== null || child.signalCode !== null) throw Error('Server exited before readiness; check local database configuration.');
       try { if ((await request('/')).status === 200) { ready = true; break; } } catch {}
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -97,6 +102,7 @@ async function main() {
     for (const route of ['/employee.html', '/html/employee.html', '/viewSchedule.html', '/html/viewSchedule.html']) {
       assert.equal((await request(route, employee)).status, 200);
     }
+    usernames.push(username); // Track before any creation attempt, including a failed response.
     assert.equal((await request('/create_employee', employee, { username, password, job: 'cook', isAdmin: true })).status, 403);
     pass('employee/admin page and account-creation authorization');
     assert.equal((await request('/create_employee', admin, { username, password, job: 'cook', isAdmin: 'true' })).status, 400);
@@ -105,6 +111,7 @@ async function main() {
     assert.equal((await request('/create_employee', admin, { username, password, job: 'cook', isAdmin: false })).status, 201);
     const created = (await pool.query('SELECT id, password, is_admin FROM employees WHERE username=$1', [username])).rows[0];
     createdId = created.id;
+    accounts.push(createdId);
     assert(isPasswordHash(created.password));
     assert.notEqual(created.password, password);
     assert(await verifyPassword(password, created.password));
@@ -147,7 +154,7 @@ async function main() {
     const rotated = await login(username, password, newEmployee);
     assert.notEqual(rotated, newEmployee);
     assert.equal((await request('/schedule', newEmployee)).status, 401);
-    const sessionRows = (await pool.query('SELECT sess FROM user_sessions')).rows;
+    const sessionRows = (await pool.query('SELECT sess FROM user_sessions WHERE sid = ANY($1::text[])', [[...sessionIds]])).rows;
     assert(sessionRows.some(row => row.sess.employeeId === createdId));
     assert(sessionRows.every(row => Object.keys(row.sess).every(key => ['cookie', 'employeeId'].includes(key))));
     pass('login rotates/invalidate old session; PostgreSQL stores identity without credentials');
@@ -158,19 +165,11 @@ async function main() {
     assert(!output.includes(password));
     pass('logout invalidates old cookies; no test password in server output');
     console.log(`Completed ${checks} check groups.`);
+  } catch (error) {
+    testError = error;
+    throw error;
   } finally {
-    if (child && child.exitCode === null) {
-      const exited = once(child, 'exit');
-      child.kill();
-      await exited;
-    }
-    // Remove only data created by this run; preserve academic seeds and other data.
-    if (createdId) {
-      await pool.query('DELETE FROM availability WHERE user_id=$1', [createdId]);
-      await pool.query("DELETE FROM user_sessions WHERE sess->>'employeeId'=$1", [String(createdId)]);
-      await pool.query('DELETE FROM employees WHERE id=$1 AND username=$2', [createdId, username]);
-    }
-    await pool.end();
+    await cleanupSmoke({ pool, child, probe, accounts, usernames, sessionIds, testError });
   }
 }
 main().catch(error => { console.error('Authentication smoke check failed:', error.message); process.exitCode = 1; });

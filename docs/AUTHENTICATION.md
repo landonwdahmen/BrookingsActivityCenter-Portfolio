@@ -75,7 +75,7 @@ node scripts/auth-smoke.js
 Remove-Item Env:AUTH_SMOKE_TEST
 ```
 
-The script starts a temporary app listener on a free loopback port, performs real HTTP requests and SQL assertions, and stops that listener. It checks both protected-page URL forms, roles, hash storage/login, identity tampering, schedule field allowlists, session rotation, logout, and cross-origin rejection. It creates a unique test account and availability record, then removes only those records. The app's normal academic seeding still runs. No external test framework or CI was added.
+The script starts a temporary app listener on a free loopback port, performs real HTTP requests and SQL assertions, and stops that listener. It checks both protected-page URL forms, roles, hash storage/login, identity tampering, schedule field allowlists, session rotation, logout, and cross-origin rejection. It creates a unique test account and availability record, then removes only those records. The app's normal academic seeding still runs. The fourth portfolio pass shares failure-safe cleanup between suites and adds [npm commands and CI](TESTING.md), without an external test framework.
 
 ## Remaining limitations
 

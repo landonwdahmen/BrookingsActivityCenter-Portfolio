@@ -1,0 +1,55 @@
+name: BAC validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16.15
+        env:
+          POSTGRES_DB: bac_ci
+          POSTGRES_USER: bac_ci
+          POSTGRES_PASSWORD: fake-ci-database-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bac_ci -d bac_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      NODE_ENV: development
+      HOST: 127.0.0.1
+      PORT: '3000'
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      POSTGRES_DB: bac_ci
+      POSTGRES_USER: bac_ci
+      POSTGRES_PASSWORD: fake-ci-database-password
+      # Public CI-only value. Not a deployed-system secret.
+      SESSION_SECRET: ci-only-9340dc83e8614bd29fd24a785c3496f01cbac02e
+      SESSION_COOKIE_SECURE: 'false'
+      TRUST_PROXY: 'false'
+      MIGRATE_LEGACY_PASSWORDS: 'false'
+      AUTH_SMOKE_TEST: bac-local-demo
+      FUNCTIONALITY_SMOKE_TEST: bac-local-demo
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev
+      - run: npm run check
+      - run: npm test
