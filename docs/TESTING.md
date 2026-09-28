@@ -46,18 +46,22 @@ Both suites run sequentially against one database in CI. The normal demo seeds r
 
 The service and application both use database/user `bac_ci`, port 5432, and a public fake CI-only password. The job sets a public fake session secret, HTTP cookie mode, disabled proxy trust/legacy conversion, and both smoke opt-ins. These credentials have no purpose outside the disposable CI service; no repository secrets are required.
 
-Steps: checkout without persisted Git credentials; setup Node with npm download caching keyed by the lockfile; `npm ci`; `npm audit --omit=dev`; `npm run check`; `npm test`. Only `contents: read` permission is granted. Normal failed steps stop the job. There are no deployments, publishing steps, badges, or secret-bearing artifacts. An advisory newly published after this pass can make the audit fail even without a code change.
+Steps: checkout without persisted Git credentials; setup Node with npm download caching keyed by the lockfile; `npm ci`; `npm audit --omit=dev`; `npm run check`; `npm test`. Only `contents: read` permission is granted. Normal failed steps stop the job. There are no deployments, publishing steps, or secret-bearing artifacts. An advisory newly published after this pass can make the audit fail even without a code change.
 
 ## Fresh setup verification
 
-Verified on 2026-09-28:
+Local and fresh-environment checks verified on 2026-09-28, before the first hosted run:
 
 - Main checkout: Windows Node 22.14.0 / npm 10.9.2; fresh `npm ci`, audit (0 findings), syntax checks, and `npm test` passed. Both missing-opt-in guards stop the combined runner before launching suites.
 - Fresh Windows setup: copied only candidate repository files into an ignored temporary directory, excluding `.git`, `.env`, `node_modules`, caches, and local artifacts. Generated a new local secret from `.env.example`, used a separate BAC Compose project on port 15434 with a newly created volume, installed dependencies afresh, and passed syntax checks and both suites. No main-checkout database data was reused.
 - Linux CI-equivalent commands: Node 24.21.0 / npm 11.19.0 in a disposable container, a fresh empty `bac_ci` database within that verification project, no `.env`, and no copied `node_modules`. `npm ci`, production audit (0 findings), syntax checks, and two consecutive `npm test` runs passed. Authentication: 12 groups per run; functionality: 6 groups per run.
 - SQL checks after those runs: 0 temporary employees, 0 temporary availability rows, 0 temporary events, 0 session rows; 10 demo employees and 10 seed events remained. An injected auth failure immediately after employee creation also preserved the original error and verified zero run-specific leftovers.
-- Compose configuration validated. Actionlint 1.7.12 accepted the workflow (shellcheck integration disabled; run steps are simple npm invocations). Both `actions/checkout@v6` and `actions/setup-node@v6` refs were verified against their official repositories. No local GitHub Actions runner was available and no hosted workflow execution is claimed.
+- Compose configuration validated. Actionlint 1.7.12 accepted the workflow (shellcheck integration disabled; run steps are simple npm invocations). Both `actions/checkout@v6` and `actions/setup-node@v6` refs were verified against their official repositories. No local GitHub Actions runner was available; these checks did not execute the workflow on GitHub.
 
 Only the separate disposable verification containers/network/volume were removed afterward. The main BAC demo resources and working checkout were preserved. Temporary source copies/tool downloads remain ignored under `.cache`. The CI-equivalent Linux check used the PostgreSQL service's network hostname; the hosted workflow uses its published loopback port, both with the same application environment interface.
 
-Limitations: local commands and a Linux container can validate the workflow's commands and services, but cannot certify GitHub-hosted action execution. No hosted CI run is claimed before publication. Real-browser end-to-end tests, failure injection for every resource error, coverage measurement, and a comprehensive static linter remain future work.
+## Hosted GitHub Actions validation
+
+Later on 2026-09-28, the first GitHub-hosted `BAC validation` workflow run completed successfully against commit `5046b18` (`docs: finalize portfolio publication content`) in approximately 33 seconds. This was an actual hosted workflow run, separate from the earlier local and Linux CI-equivalent checks above. The README's CI badge and hosted-validation wording were subsequently added in commit `0f1853e`.
+
+This records success for that commit and run, not a guarantee of future CI results or production readiness. Real-browser end-to-end tests, failure injection for every resource error, coverage measurement, and a comprehensive static linter remain future work.
